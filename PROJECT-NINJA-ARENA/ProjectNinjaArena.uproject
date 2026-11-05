@@ -1,0 +1,19 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "5.8",
+  "Category": "Games",
+  "Description": "PROJECT NINJA ARENA - Original 3D Arena Fighting Game",
+  "Modules": [
+    {
+      "Name": "ProjectNinjaArena",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ],
+  "Plugins": [
+    {
+      "Name": "EnhancedInput",
+      "Enabled": true
+    }
+  ]
+}
