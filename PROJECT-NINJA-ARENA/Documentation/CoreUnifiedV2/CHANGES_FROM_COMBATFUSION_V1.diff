@@ -1,0 +1,836 @@
+diff -ruN /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Docs/AUTHORITY_MATRIX.md /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Docs/AUTHORITY_MATRIX.md
+--- /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Docs/AUTHORITY_MATRIX.md	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Docs/AUTHORITY_MATRIX.md	2026-11-21 13:37:47.072350372 +0000
+@@ -0,0 +1,39 @@
++# NINJA_ARENA CORE UNIFIED V2 — Authority Matrix
++
++This package is a conservative refactor of CombatFusion V1.
++
++## Active authorities
++
++| Responsibility | Authority now | Notes |
++|---|---|---|
++| Health / Energy / KO | `UPNAVitalsComponent` | Single source of truth. |
++| Legacy attack execution / combo timers | `ANINJA_ARENACharacter` | Preserved for compatibility; migrate later. |
++| I-Frames / Hyper Armor / Parry / Weapon Trace | `UPNAAdvancedCombatComponent` + notifies | Additive layer. |
++| Element states | `UNinjaElementComponent` | Preserved. |
++| Hit feedback | `UNinjaCombatFeedbackComponent` | Preserved. |
++| Fighter style/profile logic | `UNinjaCombatStyleComponent` | Preserved. |
++| Stage mode / ringout rules | `APNAStageDirector` | New stage authority. |
++| Duel plane constraint | `UPNADuelConstraintComponent` | Active only in Duel25D. |
++| Damage policy helper | `UPNADamageResolver` | Stateless helper; owns no health. |
++
++## Explicitly NOT activated
++
++The Vertical Slice versions of:
++- `UPNAResourceComponent`
++- `UPNADamageComponent`
++- `UPNACombatComponent`
++
++are intentionally NOT added to the Character in V2.
++
++Reason: Combat Core 3.2 already owns those responsibilities. Activating the new
++components now would create duplicate health/combat state. They should be migrated
++one responsibility at a time later.
++
++## Variants
++
++`Variant_Combat`, `Variant_Platforming`, and `Variant_SideScrolling` remain physically
++untouched because existing code/assets may reference their C++ classes.
++
++Treat them as **Legacy / Reference**. Do not build new NINJA_ARENA gameplay on top of
++them. A later module split can remove them from the primary compile path after asset
++reference auditing.
+diff -ruN /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Docs/INTEGRATION_NOTES.md /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Docs/INTEGRATION_NOTES.md
+--- /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Docs/INTEGRATION_NOTES.md	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Docs/INTEGRATION_NOTES.md	2026-11-21 13:37:47.072948745 +0000
+@@ -0,0 +1,27 @@
++# CORE UNIFIED V2 — Integration Notes
++
++## What changed
++- Added `PNATypes.h` with `EPNACombatState`.
++- Added `APNAStageDirector`.
++- Added functional `UPNADuelConstraintComponent` using CharacterMovement plane constraints.
++- Added stateless `UPNADamageResolver`.
++- Connected Character to StageDirector/DuelConstraint.
++- Added `GetCombatState()` as a canonical read-only projection of legacy Core 3.2 state.
++- Kept `PNAVitalsComponent` as the only Health/Energy authority.
++- Did NOT activate Vertical Slice Resource/Damage/Combat components.
++- Kept Variant_* intact for compatibility.
++
++## Safe test order
++1. Back up Source.
++2. Compile Editor.
++3. Arena3D PIE: verify movement/combat unchanged.
++4. Place `APNAStageDirector`; keep mode Arena3D and re-test.
++5. Switch StageDirector to Duel25D and verify Y-plane constraint.
++6. Switch back to Arena3D and verify free 3D movement returns.
++7. Test respawn.
++8. Test guard/parry/i-frames/hyper armor.
++9. Inspect `GetCombatState()` in Blueprint/debug HUD.
++
++## Important
++This package has static validation only in this environment. It still requires
++UnrealBuildTool/UHT + PIE validation in the real UE 5.8 project.
+diff -ruN /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Docs/PENDIENTE_DE_SOPESAR.md /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Docs/PENDIENTE_DE_SOPESAR.md
+--- /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Docs/PENDIENTE_DE_SOPESAR.md	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Docs/PENDIENTE_DE_SOPESAR.md	2026-11-21 13:37:47.072704877 +0000
+@@ -0,0 +1,40 @@
++# PENDIENTE DE SOPESAR — NO OLVIDAR
++
++Before the next major merge, explicitly weigh these items instead of adding them automatically:
++
++1. **PNACombatComponent migration**
++   - Extract attack execution and combo timers from Character only after V2 compiles/PIE passes.
++   - Do not run a second combat state machine in parallel.
++
++2. **Resource system**
++   - Decide whether `PNAVitalsComponent` remains final or is later renamed/evolved.
++   - Do not activate `PNAResourceComponent` while Vitals is authoritative.
++
++3. **Damage architecture**
++   - Move block/parry/armor/element calculations gradually into `PNADamageResolver`.
++   - Health changes still end in `PNAVitalsComponent`.
++
++4. **Variants**
++   - Audit Blueprint/C++ references before moving Variant_* into a separate Legacy module.
++   - Goal: faster compile and fewer dependencies, but only after reference validation.
++
++5. **Movement / Lock-on**
++   - Integrate donor ideas only after locating the actual current PNA movement/lock-on ownership.
++   - Do not replace working movement blindly.
++
++6. **GAS / GameplayTags**
++   - Reconsider once 2–3 real characters need cooldowns/status effects/network prediction.
++   - Not required for the current vertical slice.
++
++7. **Multiplayer / rollback**
++   - Do not harden rollback or prediction before local 1v1 and PIE two-client tests are stable.
++
++8. **Kart**
++   - Keep architecturally separate until Arena3D, Duel25D and Smash are cohesive.
++
++9. **Donor library**
++   - Migrate blocks with dependencies, never isolated `.uasset` files.
++   - Retarget skeletons/animations in staging before main project migration.
++
++10. **Presentation**
++    - After core stability, prioritize animation quality, combat feedback, camera, UI and audio over adding more systems.
+diff -ruN /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Docs/VALIDATION_REPORT.json /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Docs/VALIDATION_REPORT.json
+--- /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Docs/VALIDATION_REPORT.json	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Docs/VALIDATION_REPORT.json	2026-11-21 13:37:47.074530282 +0000
+@@ -0,0 +1,18 @@
++{
++  "package": "NINJA_ARENA Core Unified V2",
++  "base": "NINJA_ARENA Source CombatFusion V1",
++  "static_checks": {
++    "PNATypes exists": true,
++    "StageDirector exists": true,
++    "DuelConstraint exists": true,
++    "DamageResolver exists": true,
++    "Character has DuelConstraint": true,
++    "Character has StageDirector": true,
++    "Vitals preserved": true,
++    "No PNAResourceComponent attached": true,
++    "No PNACombatComponent attached": true
++  },
++  "all_static_checks_passed": true,
++  "ue58_compile_executed": false,
++  "pie_executed": false
++}
+\ No newline at end of file
+diff -ruN /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/NINJA_ARENA.Build.cs /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/NINJA_ARENA.Build.cs
+--- /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/NINJA_ARENA.Build.cs	2026-11-21 13:37:47.038166202 +0000
++++ /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/NINJA_ARENA.Build.cs	2026-11-21 13:37:47.072074736 +0000
+@@ -1,51 +1,56 @@
+-// Copyright Epic Games, Inc. All Rights Reserved.
+-
+-using UnrealBuildTool;
+-
+-public class NINJA_ARENA : ModuleRules
+-{
+-	public NINJA_ARENA(ReadOnlyTargetRules Target) : base(Target)
+-	{
+-		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+-
+-		PublicDependencyModuleNames.AddRange(new string[] {
+-			"Core",
+-			"CoreUObject",
+-			"Engine",
+-			"InputCore",
+-			"EnhancedInput",
+-			"AIModule",
+-			"StateTreeModule",
+-			"GameplayStateTreeModule",
+-			"UMG",
+-			"Slate"
+-		});
+-
+-		PrivateDependencyModuleNames.AddRange(new string[] { "EngineSettings", "Niagara", "IKRig" });
+-
+-		PublicIncludePaths.AddRange(new string[] {
+-			"NINJA_ARENA",
+-			"NINJA_ARENA/Variant_Platforming",
+-			"NINJA_ARENA/Variant_Platforming/Animation",
+-			"NINJA_ARENA/Variant_Combat",
+-			"NINJA_ARENA/Variant_Combat/AI",
+-			"NINJA_ARENA/Variant_Combat/Animation",
+-			"NINJA_ARENA/Variant_Combat/Gameplay",
+-			"NINJA_ARENA/Variant_Combat/Interfaces",
+-			"NINJA_ARENA/Variant_Combat/UI",
+-			"NINJA_ARENA/Variant_SideScrolling",
+-			"NINJA_ARENA/Variant_SideScrolling/AI",
+-			"NINJA_ARENA/Variant_SideScrolling/Gameplay",
+-			"NINJA_ARENA/Variant_SideScrolling/Interfaces",
+-			"NINJA_ARENA/Variant_SideScrolling/UI"
+-		});
+-
+-		// Uncomment if you are using Slate UI
+-		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
+-
+-		// Uncomment if you are using online features
+-		// PrivateDependencyModuleNames.Add("OnlineSubsystem");
+-
+-		// To include OnlineSubsystemSteam, add it to the plugins section in your uproject file with the Enabled attribute set to true
+-	}
+-}
++// Copyright Epic Games, Inc. All Rights Reserved.
++
++using UnrealBuildTool;
++
++public class NINJA_ARENA : ModuleRules
++{
++	public NINJA_ARENA(ReadOnlyTargetRules Target) : base(Target)
++	{
++		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
++
++		PublicDependencyModuleNames.AddRange(new string[] {
++			"Core",
++			"CoreUObject",
++			"Engine",
++			"InputCore",
++			"EnhancedInput",
++			"AIModule",
++			"StateTreeModule",
++			"GameplayStateTreeModule",
++			"UMG",
++			"Slate"
++		});
++
++		PrivateDependencyModuleNames.AddRange(new string[] { "EngineSettings", "Niagara", "IKRig" });
++
++		PublicIncludePaths.AddRange(new string[] {
++			"NINJA_ARENA",
++			"NINJA_ARENA/Public",
++			"NINJA_ARENA/Public/Core",
++			"NINJA_ARENA/Public/Combat",
++			"NINJA_ARENA/Public/Modes",
++			"NINJA_ARENA/Public/Stage",
++			"NINJA_ARENA/Variant_Platforming",
++			"NINJA_ARENA/Variant_Platforming/Animation",
++			"NINJA_ARENA/Variant_Combat",
++			"NINJA_ARENA/Variant_Combat/AI",
++			"NINJA_ARENA/Variant_Combat/Animation",
++			"NINJA_ARENA/Variant_Combat/Gameplay",
++			"NINJA_ARENA/Variant_Combat/Interfaces",
++			"NINJA_ARENA/Variant_Combat/UI",
++			"NINJA_ARENA/Variant_SideScrolling",
++			"NINJA_ARENA/Variant_SideScrolling/AI",
++			"NINJA_ARENA/Variant_SideScrolling/Gameplay",
++			"NINJA_ARENA/Variant_SideScrolling/Interfaces",
++			"NINJA_ARENA/Variant_SideScrolling/UI"
++		});
++
++		// Uncomment if you are using Slate UI
++		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
++
++		// Uncomment if you are using online features
++		// PrivateDependencyModuleNames.Add("OnlineSubsystem");
++
++		// To include OnlineSubsystemSteam, add it to the plugins section in your uproject file with the Enabled attribute set to true
++	}
++}
+diff -ruN /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/NINJA_ARENACharacter.cpp /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/NINJA_ARENACharacter.cpp
+--- /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/NINJA_ARENACharacter.cpp	2026-11-21 13:37:47.028341374 +0000
++++ /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/NINJA_ARENACharacter.cpp	2026-11-21 13:37:47.071199505 +0000
+@@ -21,6 +21,9 @@
+ #include "NinjaElementComponent.h"
+ #include "PNAVitalsComponent.h"
+ #include "PNAAdvancedCombatComponent.h"
++#include "Modes/PNADuelConstraintComponent.h"
++#include "Stage/PNAStageDirector.h"
++#include "EngineUtils.h"
+ #include "Kismet/GameplayStatics.h"
+ #include "InputCoreTypes.h"
+ 
+@@ -32,6 +35,7 @@
+ 	CombatFeedback = CreateDefaultSubobject<UNinjaCombatFeedbackComponent>(TEXT("CombatFeedback"));
+ 	CombatStyle = CreateDefaultSubobject<UNinjaCombatStyleComponent>(TEXT("CombatStyle"));
+ 	AdvancedCombat = CreateDefaultSubobject<UPNAAdvancedCombatComponent>(TEXT("AdvancedCombat"));
++	DuelConstraint = CreateDefaultSubobject<UPNADuelConstraintComponent>(TEXT("DuelConstraint"));
+ 
+ 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.f);
+ 
+@@ -178,8 +182,103 @@
+ 
+ void ANINJA_ARENACharacter::BeginPlay()
+ {
+-	SpawnTransform = GetActorTransform();
+ 	Super::BeginPlay();
++	SpawnTransform = GetActorTransform();
++
++	// StageDirector is optional. Arena3D remains the safe default when none exists.
++	for (TActorIterator<APNAStageDirector> It(GetWorld()); It; ++It)
++	{
++		StageDirector = *It;
++		break;
++	}
++
++	if (StageDirector)
++	{
++		StageDirector->OnStageModeChanged.AddDynamic(this, &ANINJA_ARENACharacter::HandleStageModeChanged);
++		ApplyStageMode(StageDirector->GetStageMode());
++	}
++	else if (DuelConstraint)
++	{
++		DuelConstraint->Configure(false, GetActorLocation().Y);
++	}
++}
++
++void ANINJA_ARENACharacter::HandleStageModeChanged(EPNAStageMode OldMode, EPNAStageMode NewMode)
++{
++    ApplyStageMode(NewMode);
++}
++
++void ANINJA_ARENACharacter::ApplyStageMode(EPNAStageMode NewMode)
++{
++    if (!DuelConstraint)
++    {
++        return;
++    }
++
++    if (NewMode == EPNAStageMode::Duel25D)
++    {
++        const float PlaneY = StageDirector ? StageDirector->DuelPlaneY : GetActorLocation().Y;
++        DuelConstraint->Configure(true, PlaneY);
++    }
++    else
++    {
++        DuelConstraint->SetEnabled(false);
++    }
++}
++
++EPNACombatState ANINJA_ARENACharacter::GetCombatState() const
++{
++    if (bRoundLocked)
++    {
++        return EPNACombatState::RoundLocked;
++    }
++
++    if (Vitals && Vitals->IsDefeated())
++    {
++        return EPNACombatState::KO;
++    }
++
++    if (bUltimateCharging)
++    {
++        return EPNACombatState::Ultimate;
++    }
++
++    if (AdvancedCombat && AdvancedCombat->IsParryWindowOpen())
++    {
++        return EPNACombatState::Parrying;
++    }
++
++    if (bLaunched)
++    {
++        return EPNACombatState::Launched;
++    }
++
++    if (IsStunned())
++    {
++        return EPNACombatState::HitStun;
++    }
++
++    if (bGuarding)
++    {
++        return EPNACombatState::Blocking;
++    }
++
++    if (bIsDashing)
++    {
++        return EPNACombatState::Dodging;
++    }
++
++    if (PendingStrike.ImpactAt > 0.f)
++    {
++        return EPNACombatState::Attacking;
++    }
++
++    if (GetCharacterMovement() && GetCharacterMovement()->IsFalling())
++    {
++        return EPNACombatState::Airborne;
++    }
++
++    return EPNACombatState::Neutral;
+ }
+ 
+ void ANINJA_ARENACharacter::ForceRespawn()
+diff -ruN /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/NINJA_ARENACharacter.h /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/NINJA_ARENACharacter.h
+--- /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/NINJA_ARENACharacter.h	2026-11-21 13:37:47.016184867 +0000
++++ /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/NINJA_ARENACharacter.h	2026-11-21 13:37:47.070626380 +0000
+@@ -4,6 +4,7 @@
+ #include "CoreMinimal.h"
+ #include "GameFramework/Character.h"
+ #include "Logging/LogMacros.h"
++#include "Core/PNATypes.h"
+ #include "NINJA_ARENACharacter.generated.h"
+ 
+ class USpringArmComponent;
+@@ -14,6 +15,8 @@
+ class UNinjaElementComponent;
+ class UPNAVitalsComponent;
+ class UPNAAdvancedCombatComponent;
++class UPNADuelConstraintComponent;
++class APNAStageDirector;
+ struct FInputActionValue;
+ 
+ DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
+@@ -95,6 +98,14 @@
+ 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="PNA|Combat|Advanced", meta=(AllowPrivateAccess="true"))
+ 	TObjectPtr<UPNAAdvancedCombatComponent> AdvancedCombat;
+ 
++	/** Enabled only while the active StageDirector is in Duel25D mode. */
++	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="PNA|Modes", meta=(AllowPrivateAccess="true"))
++	TObjectPtr<UPNADuelConstraintComponent> DuelConstraint;
++
++	/** Cached stage authority. Not owned by the character. */
++	UPROPERTY(Transient, BlueprintReadOnly, Category="PNA|Stage", meta=(AllowPrivateAccess="true"))
++	TObjectPtr<APNAStageDirector> StageDirector;
++
+ 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="PNA|Combat", meta=(ClampMin="0.0"))
+ 	float LightDamage = 12.f;
+ 
+@@ -225,6 +236,11 @@
+ 
+ 	virtual void Tick(float DeltaTime) override;
+ 
++	UFUNCTION()
++	void HandleStageModeChanged(EPNAStageMode OldMode, EPNAStageMode NewMode);
++
++	void ApplyStageMode(EPNAStageMode NewMode);
++
+ private:
+ 	static constexpr int32 MaxAirComboHits = 3;
+ 
+@@ -275,6 +291,16 @@
+ 	UNinjaCombatStyleComponent* GetCombatStyle() const { return CombatStyle; }
+ 	UPNAAdvancedCombatComponent* GetAdvancedCombat() const { return AdvancedCombat; }
+ 
++	UFUNCTION(BlueprintPure, Category="PNA|Modes")
++	UPNADuelConstraintComponent* GetDuelConstraint() const { return DuelConstraint; }
++
++	UFUNCTION(BlueprintPure, Category="PNA|Stage")
++	APNAStageDirector* GetStageDirector() const { return StageDirector; }
++
++	/** Canonical read-only view of the legacy Core 3.2 combat state. */
++	UFUNCTION(BlueprintPure, Category="PNA|Combat")
++	EPNACombatState GetCombatState() const;
++
+ 	UFUNCTION(BlueprintCallable, Category="PNA|Ultimate")
+ 	void StartUltimate();
+ 
+diff -ruN /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/Private/Combat/PNADamageResolver.cpp /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/Private/Combat/PNADamageResolver.cpp
+--- /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/Private/Combat/PNADamageResolver.cpp	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/Private/Combat/PNADamageResolver.cpp	2026-11-21 13:37:47.069673132 +0000
+@@ -0,0 +1,34 @@
++#include "Combat/PNADamageResolver.h"
++
++FPNAResolvedDamage UPNADamageResolver::ResolveBasicDamage(
++    float RawDamage,
++    bool bBlocking,
++    bool bPerfectGuard,
++    bool bHyperArmor,
++    float GuardDamageMultiplier)
++{
++    FPNAResolvedDamage Result;
++    const float SafeDamage = FMath::Max(0.f, RawDamage);
++
++    Result.bBlocked = bBlocking || bPerfectGuard;
++    Result.bPerfectGuard = bPerfectGuard;
++    Result.bIgnoreHitStun = bHyperArmor;
++
++    if (bPerfectGuard)
++    {
++        Result.HealthDamage = 0.f;
++        Result.KnockbackScale = 0.f;
++    }
++    else if (bBlocking)
++    {
++        Result.HealthDamage = SafeDamage * FMath::Clamp(GuardDamageMultiplier, 0.f, 1.f);
++        Result.KnockbackScale = 0.35f;
++    }
++    else
++    {
++        Result.HealthDamage = SafeDamage;
++        Result.KnockbackScale = 1.f;
++    }
++
++    return Result;
++}
+diff -ruN /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/Private/Modes/PNADuelConstraintComponent.cpp /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/Private/Modes/PNADuelConstraintComponent.cpp
+--- /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/Private/Modes/PNADuelConstraintComponent.cpp	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/Private/Modes/PNADuelConstraintComponent.cpp	2026-11-21 13:37:47.069199156 +0000
+@@ -0,0 +1,81 @@
++#include "Modes/PNADuelConstraintComponent.h"
++
++#include "GameFramework/Character.h"
++#include "GameFramework/CharacterMovementComponent.h"
++
++UPNADuelConstraintComponent::UPNADuelConstraintComponent()
++{
++    PrimaryComponentTick.bCanEverTick = false;
++}
++
++void UPNADuelConstraintComponent::BeginPlay()
++{
++    Super::BeginPlay();
++    ApplyConstraint();
++}
++
++void UPNADuelConstraintComponent::Configure(bool bNewEnabled, float NewPlaneY)
++{
++    bEnabled = bNewEnabled;
++    PlaneY = NewPlaneY;
++    ApplyConstraint();
++}
++
++void UPNADuelConstraintComponent::SetEnabled(bool bNewEnabled)
++{
++    if (bEnabled == bNewEnabled)
++    {
++        return;
++    }
++
++    bEnabled = bNewEnabled;
++    ApplyConstraint();
++}
++
++void UPNADuelConstraintComponent::SetPlaneY(float NewPlaneY)
++{
++    PlaneY = NewPlaneY;
++    ApplyConstraint();
++}
++
++FVector UPNADuelConstraintComponent::ProjectToPlane(const FVector& Location) const
++{
++    if (!bEnabled)
++    {
++        return Location;
++    }
++
++    FVector Out = Location;
++    Out.Y = PlaneY;
++    return Out;
++}
++
++void UPNADuelConstraintComponent::ApplyConstraint()
++{
++    ACharacter* Character = Cast<ACharacter>(GetOwner());
++    if (!Character)
++    {
++        return;
++    }
++
++    UCharacterMovementComponent* Movement = Character->GetCharacterMovement();
++    if (!Movement)
++    {
++        return;
++    }
++
++    if (bEnabled)
++    {
++        Movement->SetPlaneConstraintNormal(FVector::YAxisVector);
++        Movement->SetPlaneConstraintOrigin(FVector(0.f, PlaneY, 0.f));
++        Movement->SetPlaneConstraintEnabled(true);
++
++        FVector Location = Character->GetActorLocation();
++        Location.Y = PlaneY;
++        Character->SetActorLocation(Location, false, nullptr, ETeleportType::TeleportPhysics);
++    }
++    else
++    {
++        Movement->SetPlaneConstraintEnabled(false);
++    }
++}
+diff -ruN /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/Private/Stage/PNAStageDirector.cpp /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/Private/Stage/PNAStageDirector.cpp
+--- /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/Private/Stage/PNAStageDirector.cpp	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/Private/Stage/PNAStageDirector.cpp	2026-11-21 13:37:47.068717069 +0000
+@@ -0,0 +1,48 @@
++#include "Stage/PNAStageDirector.h"
++
++APNAStageDirector::APNAStageDirector()
++{
++    PrimaryActorTick.bCanEverTick = false;
++}
++
++void APNAStageDirector::SetStageMode(EPNAStageMode NewMode)
++{
++    if (CurrentMode == NewMode)
++    {
++        return;
++    }
++
++    const EPNAStageMode OldMode = CurrentMode;
++    CurrentMode = NewMode;
++    OnStageModeChanged.Broadcast(OldMode, NewMode);
++}
++
++bool APNAStageDirector::IsRingout(const FVector& Location) const
++{
++    return Location.Z <= RingoutZ;
++}
++
++FVector APNAStageDirector::ConstrainToDuelPlane(const FVector& Location) const
++{
++    FVector Out = Location;
++    Out.Y = DuelPlaneY;
++    return Out;
++}
++
++FVector APNAStageDirector::ComputeKnockbackDirection(const FVector& Attacker, const FVector& Victim, float UpwardBias) const
++{
++    FVector Direction = Victim - Attacker;
++    Direction.Z = 0.f;
++
++    if (Direction.IsNearlyZero())
++    {
++        Direction = FVector::ForwardVector;
++    }
++    else
++    {
++        Direction.Normalize();
++    }
++
++    Direction.Z = FMath::Max(0.f, UpwardBias);
++    return Direction.GetSafeNormal();
++}
+diff -ruN /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/Public/Combat/PNADamageResolver.h /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/Public/Combat/PNADamageResolver.h
+--- /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/Public/Combat/PNADamageResolver.h	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/Public/Combat/PNADamageResolver.h	2026-11-21 13:37:47.069507812 +0000
+@@ -0,0 +1,46 @@
++#pragma once
++
++#include "CoreMinimal.h"
++#include "Kismet/BlueprintFunctionLibrary.h"
++#include "PNADamageResolver.generated.h"
++
++USTRUCT(BlueprintType)
++struct FPNAResolvedDamage
++{
++    GENERATED_BODY()
++
++    UPROPERTY(BlueprintReadOnly)
++    float HealthDamage = 0.f;
++
++    UPROPERTY(BlueprintReadOnly)
++    float KnockbackScale = 1.f;
++
++    UPROPERTY(BlueprintReadOnly)
++    bool bBlocked = false;
++
++    UPROPERTY(BlueprintReadOnly)
++    bool bPerfectGuard = false;
++
++    UPROPERTY(BlueprintReadOnly)
++    bool bIgnoreHitStun = false;
++};
++
++/**
++ * Stateless damage-policy helper.
++ * It deliberately does NOT own Health or Energy. PNAVitalsComponent remains
++ * the authoritative resource store during the Core Unified migration.
++ */
++UCLASS()
++class NINJA_ARENA_API UPNADamageResolver : public UBlueprintFunctionLibrary
++{
++    GENERATED_BODY()
++
++public:
++    UFUNCTION(BlueprintPure, Category="PNA|Combat|Damage")
++    static FPNAResolvedDamage ResolveBasicDamage(
++        float RawDamage,
++        bool bBlocking,
++        bool bPerfectGuard,
++        bool bHyperArmor,
++        float GuardDamageMultiplier = 0.2f);
++};
+diff -ruN /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/Public/Core/PNATypes.h /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/Public/Core/PNATypes.h
+--- /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/Public/Core/PNATypes.h	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/Public/Core/PNATypes.h	2026-11-21 13:37:47.068010462 +0000
+@@ -0,0 +1,68 @@
++#pragma once
++
++#include "CoreMinimal.h"
++#include "PNATypes.generated.h"
++
++UENUM(BlueprintType)
++enum class EPNAStageMode : uint8
++{
++    Arena3D UMETA(DisplayName="Arena 3D"),
++    Duel25D UMETA(DisplayName="Duel 2.5D"),
++    Smash UMETA(DisplayName="Smash"),
++    Kart UMETA(DisplayName="Kart")
++};
++
++UENUM(BlueprintType)
++enum class EPNAHitStrength : uint8
++{
++    Light,
++    Medium,
++    Heavy,
++    Special
++};
++
++/**
++ * Readable high-level combat state.
++ *
++ * Combat Core 3.2 still owns the legacy booleans/timers during this migration.
++ * NINJA_ARENACharacter::GetCombatState derives one canonical state from them.
++ * This avoids adding a second competing state machine while giving Blueprint/UI
++ * a single source for presentation and later refactoring.
++ */
++UENUM(BlueprintType)
++enum class EPNACombatState : uint8
++{
++    Neutral,
++    Attacking,
++    Recovery,
++    Blocking,
++    Parrying,
++    Dodging,
++    HitStun,
++    Launched,
++    Airborne,
++    KO,
++    Ultimate,
++    RoundLocked
++};
++
++USTRUCT(BlueprintType)
++struct FPNAHitData
++{
++    GENERATED_BODY()
++
++    UPROPERTY(EditAnywhere, BlueprintReadWrite)
++    float Damage = 10.f;
++
++    UPROPERTY(EditAnywhere, BlueprintReadWrite)
++    float HitStun = 0.25f;
++
++    UPROPERTY(EditAnywhere, BlueprintReadWrite)
++    float KnockbackForce = 650.f;
++
++    UPROPERTY(EditAnywhere, BlueprintReadWrite)
++    float UpwardBias = 0.15f;
++
++    UPROPERTY(EditAnywhere, BlueprintReadWrite)
++    EPNAHitStrength Strength = EPNAHitStrength::Light;
++};
+diff -ruN /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/Public/Modes/PNADuelConstraintComponent.h /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/Public/Modes/PNADuelConstraintComponent.h
+--- /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/Public/Modes/PNADuelConstraintComponent.h	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/Public/Modes/PNADuelConstraintComponent.h	2026-11-21 13:37:47.068972985 +0000
+@@ -0,0 +1,38 @@
++#pragma once
++
++#include "CoreMinimal.h"
++#include "Components/ActorComponent.h"
++#include "PNADuelConstraintComponent.generated.h"
++
++UCLASS(ClassGroup=(NINJA_ARENA), meta=(BlueprintSpawnableComponent))
++class NINJA_ARENA_API UPNADuelConstraintComponent : public UActorComponent
++{
++    GENERATED_BODY()
++
++public:
++    UPNADuelConstraintComponent();
++
++    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="PNA|Duel")
++    bool bEnabled = false;
++
++    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="PNA|Duel")
++    float PlaneY = 0.f;
++
++    UFUNCTION(BlueprintCallable, Category="PNA|Duel")
++    void Configure(bool bNewEnabled, float NewPlaneY);
++
++    UFUNCTION(BlueprintCallable, Category="PNA|Duel")
++    void SetEnabled(bool bNewEnabled);
++
++    UFUNCTION(BlueprintCallable, Category="PNA|Duel")
++    void SetPlaneY(float NewPlaneY);
++
++    UFUNCTION(BlueprintPure, Category="PNA|Duel")
++    FVector ProjectToPlane(const FVector& Location) const;
++
++protected:
++    virtual void BeginPlay() override;
++
++private:
++    void ApplyConstraint();
++};
+diff -ruN /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/Public/Stage/PNAStageDirector.h /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/Public/Stage/PNAStageDirector.h
+--- /mnt/data/_pna_core_refactor/NINJA_ARENA_Source_CombatFusion_V1/Source/NINJA_ARENA/Public/Stage/PNAStageDirector.h	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/_pna_core_refactor/NINJA_ARENA_CoreUnified_V2/Source/NINJA_ARENA/Public/Stage/PNAStageDirector.h	2026-11-21 13:37:47.068287310 +0000
+@@ -0,0 +1,51 @@
++#pragma once
++
++#include "CoreMinimal.h"
++#include "GameFramework/Actor.h"
++#include "Core/PNATypes.h"
++#include "PNAStageDirector.generated.h"
++
++DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPNAStageModeChanged, EPNAStageMode, OldMode, EPNAStageMode, NewMode);
++DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FPNARingout, AActor*, Victim);
++
++UCLASS(Blueprintable)
++class NINJA_ARENA_API APNAStageDirector : public AActor
++{
++    GENERATED_BODY()
++
++public:
++    APNAStageDirector();
++
++    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="PNA|Stage")
++    EPNAStageMode CurrentMode = EPNAStageMode::Arena3D;
++
++    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="PNA|Stage")
++    float RingoutZ = -900.f;
++
++    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="PNA|Stage")
++    float DuelPlaneY = 0.f;
++
++    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="PNA|Stage")
++    float HazardDamage = 15.f;
++
++    UPROPERTY(BlueprintAssignable, Category="PNA|Stage")
++    FPNAStageModeChanged OnStageModeChanged;
++
++    UPROPERTY(BlueprintAssignable, Category="PNA|Stage")
++    FPNARingout OnRingout;
++
++    UFUNCTION(BlueprintCallable, Category="PNA|Stage")
++    void SetStageMode(EPNAStageMode NewMode);
++
++    UFUNCTION(BlueprintPure, Category="PNA|Stage")
++    EPNAStageMode GetStageMode() const { return CurrentMode; }
++
++    UFUNCTION(BlueprintPure, Category="PNA|Stage")
++    bool IsRingout(const FVector& Location) const;
++
++    UFUNCTION(BlueprintPure, Category="PNA|Stage")
++    FVector ConstrainToDuelPlane(const FVector& Location) const;
++
++    UFUNCTION(BlueprintPure, Category="PNA|Stage")
++    FVector ComputeKnockbackDirection(const FVector& Attacker, const FVector& Victim, float UpwardBias=0.25f) const;
++};

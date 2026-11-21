@@ -1,0 +1,18 @@
+{
+  "package": "NINJA_ARENA Core Unified V2",
+  "base": "NINJA_ARENA Source CombatFusion V1",
+  "static_checks": {
+    "PNATypes exists": true,
+    "StageDirector exists": true,
+    "DuelConstraint exists": true,
+    "DamageResolver exists": true,
+    "Character has DuelConstraint": true,
+    "Character has StageDirector": true,
+    "Vitals preserved": true,
+    "No PNAResourceComponent attached": true,
+    "No PNACombatComponent attached": true
+  },
+  "all_static_checks_passed": true,
+  "ue58_compile_executed": false,
+  "pie_executed": false
+}
